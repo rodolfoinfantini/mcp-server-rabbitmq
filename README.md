@@ -21,7 +21,7 @@ Quickly launch using uv/uvx with zero manual configuration.
 ### From source (Fork)
 1. Clone this repository:
 ```bash
-git clone git@github.com:rodolfoinfantini/mcp-server-rabbitmq.git
+git clone https://github.com/rodolfoinfantini/mcp-server-rabbitmq.git
 cd mcp-server-rabbitmq
 ```
 
@@ -77,7 +77,7 @@ You can configure the default automatic connection by defining the following env
 
 ```bash
 # Clone the repository
-git clone git@github.com:rodolfoinfantini/mcp-server-rabbitmq.git
+git clone https://github.com/rodolfoinfantini/mcp-server-rabbitmq.git
 cd mcp-server-rabbitmq
 
 # Install package in editable mode
