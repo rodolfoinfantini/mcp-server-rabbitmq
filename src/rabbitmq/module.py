@@ -86,16 +86,75 @@ class RabbitMQModule:
         self.active_alias: str | None = None
         self.default_management_port: int | None = None
 
+    def try_auto_connect(self) -> bool:
+        """Attempt to auto-connect using environment variables if not already connected or connection is dead."""
+        import os
+        from loguru import logger
+
+        # If already connected, test if it is still alive
+        if self.active_alias and self.active_alias in self.brokers:
+            try:
+                self.brokers[self.active_alias]["rmq_admin"].test_connection()
+                return True
+            except Exception as e:
+                logger.warning(f"Existing connection for '{self.active_alias}' seems dead, trying to reconnect: {e}")
+                # We will proceed to reconnect
+
+        host = os.getenv("RABBITMQ_HOST") or os.getenv("RMQ_HOST")
+        user = os.getenv("RABBITMQ_USER") or os.getenv("RMQ_USER")
+        password = os.getenv("RABBITMQ_PASS") or os.getenv("RMQ_PASS")
+        port_env = os.getenv("RABBITMQ_PORT") or os.getenv("RMQ_PORT")
+        use_tls_env = os.getenv("RABBITMQ_USE_TLS") or os.getenv("RMQ_USE_TLS")
+        mgmt_port_env = os.getenv("RABBITMQ_MANAGEMENT_PORT") or os.getenv("RMQ_MANAGEMENT_PORT")
+
+        if host and user and password:
+            use_tls = str(use_tls_env).lower() != "false"
+            port = int(port_env) if port_env else (5671 if use_tls else 5672)
+            management_port = int(mgmt_port_env) if mgmt_port_env else self.default_management_port
+
+            logger.warning(f"Attempting auto-connection to RabbitMQ at {host}:{port} (use_tls={use_tls}, mgmt_port={management_port})...")
+            try:
+                rmq = RabbitMQConnection(
+                    hostname=host,
+                    username=user,
+                    password=password,
+                    port=port,
+                    use_tls=use_tls,
+                )
+                rmq_admin = RabbitMQAdmin(
+                    hostname=host,
+                    username=user,
+                    password=password,
+                    use_tls=use_tls,
+                    port=management_port,
+                )
+                rmq_admin.test_connection()
+                alias = "default"
+                self.brokers[alias] = {
+                    "rmq": rmq,
+                    "rmq_admin": rmq_admin,
+                    "hostname": host,
+                }
+                self.active_alias = alias
+                logger.warning(f"Successfully auto-connected to {host} as 'default'")
+                return True
+            except Exception as e:
+                logger.error(f"Auto-connection to RabbitMQ failed: {e}")
+                return False
+        return False
+
     def _get_admin(self) -> RabbitMQAdmin:
-        """Return the active broker's admin client."""
+        """Return the active broker's admin client, attempting auto-connection if needed."""
+        self.try_auto_connect()
         if not self.active_alias or self.active_alias not in self.brokers:
-            raise AssertionError("No active broker. Call initialize_connection first.")
+            raise AssertionError("No active broker. Verify your port-forward or environment variables, and try again.")
         return self.brokers[self.active_alias]["rmq_admin"]
 
     def _get_rmq(self) -> RabbitMQConnection:
-        """Return the active broker's AMQP connection."""
+        """Return the active broker's AMQP connection, attempting auto-connection if needed."""
+        self.try_auto_connect()
         if not self.active_alias or self.active_alias not in self.brokers:
-            raise AssertionError("No active broker. Call initialize_connection first.")
+            raise AssertionError("No active broker. Verify your port-forward or environment variables, and try again.")
         return self.brokers[self.active_alias]["rmq"]
 
     def register_rabbitmq_management_tools(self, allow_mutative_tools: bool = False):
