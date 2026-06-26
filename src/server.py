@@ -6,7 +6,6 @@ import os
 import sys
 
 from fastmcp import FastMCP
-from fastmcp.server.auth import BearerAuthProvider
 from loguru import logger
 
 from .constant import MCP_SERVER_VERSION
@@ -30,27 +29,13 @@ class RabbitMQMCPServer:
         rmq_module.default_management_port = management_port
         rmq_module.register_rabbitmq_management_tools(allow_mutative_tools)
 
-    def run(self, args):
-        """Run the MCP server with the provided arguments."""
-        self.logger.info(f"Starting RabbitMQ MCP Server v{MCP_SERVER_VERSION}")
+        # Try to auto-connect on startup (will fail gracefully if port-forward is not active yet)
+        rmq_module.try_auto_connect()
 
-        if args.http:
-            if args.http_auth_jwks_uri == "":
-                raise ValueError("Please set --http-auth-jwks-uri")
-            self.mcp.auth = BearerAuthProvider(
-                jwks_uri=args.http_auth_jwks_uri,
-                issuer=args.http_auth_issuer,
-                audience=args.http_auth_audience,
-                required_scopes=args.http_auth_required_scopes,
-            )
-            self.mcp.run(
-                transport="streamable-http",
-                host="127.0.0.1",
-                port=args.server_port,
-                path="/mcp",
-            )
-        else:
-            self.mcp.run()
+    def run(self):
+        """Run the MCP server."""
+        self.logger.warning(f"Starting RabbitMQ MCP Server v{MCP_SERVER_VERSION}")
+        self.mcp.run()
 
 
 def main():
@@ -63,40 +48,16 @@ def main():
         action="store_true",
         help="Enable tools that can mutate the states of RabbitMQ",
     )
-    # Streamable HTTP specific configuration
-    parser.add_argument("--http", action="store_true", help="Use Streamable HTTP transport")
-    parser.add_argument(
-        "--server-port", type=int, default=8888, help="Port to run the MCP server on"
-    )
+    
+    # Get default management port from env if available
+    default_mgmt_port = os.getenv("RABBITMQ_MANAGEMENT_PORT") or os.getenv("RMQ_MANAGEMENT_PORT")
+    default_mgmt_port_val = int(default_mgmt_port) if default_mgmt_port else None
+
     parser.add_argument(
         "--management-port",
         type=int,
-        default=None,
+        default=default_mgmt_port_val,
         help="Default RabbitMQ Management API port (default: 443 for TLS, 15672 for non-TLS)",
-    )
-    parser.add_argument(
-        "--http-auth-jwks-uri",
-        type=str,
-        default=None,
-        help="JKWS URI for FastMCP Bearer Auth Provider",
-    )
-    parser.add_argument(
-        "--http-auth-issuer",
-        type=str,
-        default=None,
-        help="Issuer for FastMCP Bearer Auth Provider",
-    )
-    parser.add_argument(
-        "--http-auth-audience",
-        type=str,
-        default=None,
-        help="Audience for FastMCP Bearer Auth Provider",
-    )
-    parser.add_argument(
-        "--http-auth-required-scopes",
-        nargs="*",
-        default=None,
-        help="Required scope for FastMCP Bearer Auth Provider",
     )
 
     args = parser.parse_args()
@@ -104,9 +65,10 @@ def main():
     # Create server with connection parameters from args
     server = RabbitMQMCPServer(args.allow_mutative_tools, args.management_port)
 
-    # Run the server with remaining args
-    server.run(args)
+    # Run the server
+    server.run()
 
 
 if __name__ == "__main__":
     main()
+
