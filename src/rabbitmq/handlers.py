@@ -240,6 +240,56 @@ def handle_shovel(rabbitmq_admin: RabbitMQAdmin, shovel_name: str, vhost: str = 
     return rabbitmq_admin.get_shovel_info(shovel_name, vhost)
 
 
+def handle_reprocess_messages(
+    rabbitmq_admin: RabbitMQAdmin,
+    src_queue: str,
+    dest_queue: str,
+    vhost: str = "/",
+) -> dict:
+    """Reprocess messages from one queue to another using the Shovel plugin.
+
+    First verifies if the Shovel plugin is enabled, then configures a dynamic Shovel
+    to move messages. The shovel is set to automatically delete itself after
+    the current queue length has been consumed.
+    """
+    # 1. Verify if the Shovel plugin is enabled
+    overview = rabbitmq_admin.get_overview()
+    enabled_plugins = overview.get("enabled_plugins", [])
+    has_shovel = any("shovel" in str(p).lower() for p in enabled_plugins)
+
+    # Double check by calling list_shovels if not clearly indicated in enabled_plugins
+    if not has_shovel:
+        try:
+            rabbitmq_admin.list_shovels()
+            has_shovel = True
+        except Exception:
+            has_shovel = False
+
+    if not has_shovel:
+        raise RuntimeError(
+            "The RabbitMQ Shovel plugin ('rabbitmq_shovel' and 'rabbitmq_shovel_management') "
+            "is not enabled on the broker. Please enable them using "
+            "'rabbitmq-plugins enable rabbitmq_shovel rabbitmq_shovel_management' before using this tool."
+        )
+
+    # 2. Define the dynamic shovel
+    shovel_name = f"reprocess-{src_queue}-to-{dest_queue}"
+    rabbitmq_admin.create_shovel(
+        name=shovel_name,
+        src_queue=src_queue,
+        dest_queue=dest_queue,
+        vhost=vhost,
+        src_delete_after="queue-length",
+    )
+
+    return {
+        "status": "ok",
+        "message": f"Shovel '{shovel_name}' created successfully to move messages from '{src_queue}' to '{dest_queue}' in vhost '{vhost}'. "
+                   f"With 'src-delete-after' set to 'queue-length', RabbitMQ will automatically delete this shovel once all currently buffered messages have been moved.",
+        "shovel_name": shovel_name,
+    }
+
+
 ## Users
 
 

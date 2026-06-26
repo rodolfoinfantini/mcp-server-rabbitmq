@@ -34,6 +34,7 @@ from src.rabbitmq.handlers import (
     handle_list_users,
     handle_list_vhosts,
     handle_purge_queue,
+    handle_reprocess_messages,
     handle_shovel,
 )
 
@@ -171,3 +172,26 @@ class TestHandlers:
     def test_handle_get_guidelines_invalid(self):
         with pytest.raises(ValueError, match="doesn't exist"):
             handle_get_guidelines("invalid_guide")
+
+    def test_handle_reprocess_messages_success(self, mock_admin):
+        mock_admin.get_overview.return_value = {"enabled_plugins": ["rabbitmq_shovel", "rabbitmq_shovel_management"]}
+        
+        result = handle_reprocess_messages(mock_admin, "queue-src", "queue-dest", vhost="/")
+        
+        assert result["status"] == "ok"
+        assert result["shovel_name"] == "reprocess-queue-src-to-queue-dest"
+        mock_admin.create_shovel.assert_called_once_with(
+            name="reprocess-queue-src-to-queue-dest",
+            src_queue="queue-src",
+            dest_queue="queue-dest",
+            vhost="/",
+            src_delete_after="queue-length"
+        )
+
+    def test_handle_reprocess_messages_plugin_disabled(self, mock_admin):
+        mock_admin.get_overview.return_value = {"enabled_plugins": ["rabbitmq_management"]}
+        mock_admin.list_shovels.side_effect = Exception("Not Found")
+        
+        with pytest.raises(RuntimeError, match="not enabled on the broker"):
+            handle_reprocess_messages(mock_admin, "queue-src", "queue-dest", vhost="/")
+

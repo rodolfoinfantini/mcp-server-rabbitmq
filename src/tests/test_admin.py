@@ -103,3 +103,25 @@ class TestRabbitMQAdmin:
         mock_request.return_value = mock_response
         result = admin.get_broker_definition()
         assert result == {"test": "data"}
+
+    @patch("src.rabbitmq.admin.requests.request")
+    def test_create_shovel(self, mock_request, admin, mock_response):
+        mock_request.return_value = mock_response
+        admin.create_shovel("test-shovel", "queue-src", "queue-dest")
+        mock_request.assert_called_once()
+        args, kwargs = mock_request.call_args
+        assert args[0] == "PUT"
+        assert "parameters/shovel/%2F/test-shovel" in args[1]
+        assert kwargs["json"]["value"]["src-queue"] == "queue-src"
+        assert kwargs["json"]["value"]["dest-queue"] == "queue-dest"
+        assert kwargs["json"]["value"]["src-delete-after"] == "queue-length"
+
+    @patch("src.rabbitmq.admin.requests.request")
+    def test_delete_shovel(self, mock_request, admin, mock_response):
+        mock_request.return_value = mock_response
+        admin.delete_shovel("test-shovel")
+        mock_request.assert_called_once()
+        args, kwargs = mock_request.call_args
+        assert args[0] == "DELETE"
+        assert "parameters/shovel/%2F/test-shovel" in args[1]
+

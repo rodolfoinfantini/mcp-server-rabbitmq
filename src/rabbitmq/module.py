@@ -67,6 +67,7 @@ from .handlers import (
     handle_list_vhosts,
     handle_publish_message,
     handle_purge_queue,
+    handle_reprocess_messages,
     handle_rebalance_queues,
     handle_set_permissions,
     handle_setup_federation,
@@ -676,3 +677,17 @@ class RabbitMQModule:
             """Rebalance queue leaders across cluster nodes. Useful after adding/removing nodes."""
             handle_rebalance_queues(self._get_admin())
             return "Queue rebalance initiated"
+
+        @self.mcp.tool()
+        def rabbitmq_broker_reprocess_messages(
+            src_queue: str, dest_queue: str, vhost: str = "/"
+        ) -> dict:
+            """Reprocess and move messages from a source queue to a destination queue in a virtual host.
+
+            This tool uses the RabbitMQ Shovel plugin to reliably transfer the messages. It first verifies
+            if the Shovel plugin is enabled. Once the Shovel is declared with 'src-delete-after' set to
+            'queue-length', RabbitMQ will move all messages currently in the source queue to the destination
+            and then automatically delete/clean up the shovel configuration when finished.
+            """
+            return handle_reprocess_messages(self._get_admin(), src_queue, dest_queue, vhost)
+

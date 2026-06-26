@@ -148,6 +148,39 @@ class RabbitMQAdmin:
         response = self._make_request("GET", f"parameters/shovel/{vhost_encoded}/{shovel_name}")
         return response.json()
 
+    def create_shovel(
+        self,
+        name: str,
+        src_queue: str,
+        dest_queue: str,
+        vhost: str = "/",
+        src_delete_after: str = "queue-length",
+    ) -> None:
+        """Create or update a dynamic shovel."""
+        validate_rabbitmq_name(name, "Shovel name")
+        validate_rabbitmq_name(src_queue, "Source queue name")
+        validate_rabbitmq_name(dest_queue, "Destination queue name")
+        vhost_encoded = quote(vhost, safe="")
+        data = {
+            "value": {
+                "src-protocol": "amqp091",
+                "src-uri": "amqp://",
+                "src-queue": src_queue,
+                "dest-protocol": "amqp091",
+                "dest-uri": "amqp://",
+                "dest-queue": dest_queue,
+                "ack-mode": "on-confirm",
+                "src-delete-after": src_delete_after,
+            }
+        }
+        self._make_request("PUT", f"parameters/shovel/{vhost_encoded}/{name}", data=data)
+
+    def delete_shovel(self, name: str, vhost: str = "/") -> None:
+        """Delete a dynamic shovel parameter."""
+        validate_rabbitmq_name(name, "Shovel name")
+        vhost_encoded = quote(vhost, safe="")
+        self._make_request("DELETE", f"parameters/shovel/{vhost_encoded}/{name}")
+
     def get_cluster_nodes(self) -> dict:
         """Get a list of nodes in the RabbitMQ cluster."""
         response = self._make_request("GET", "nodes")
